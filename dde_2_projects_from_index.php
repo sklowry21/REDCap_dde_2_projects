@@ -32,11 +32,43 @@ if ($pid2 == 0) {
 
 #print "pid1: $pid1, pid2: $pid2</br>";
 
+if (!SUPER_USER) {
+    $sql = sprintf( "
+            SELECT p.app_title
+              FROM redcap_projects p
+              LEFT JOIN redcap_user_rights u
+                ON u.project_id = p.project_id
+             WHERE p.project_id = %d AND (u.username = '%s' OR p.auth_meth = 'none')",
+                     $_REQUEST['pid'], $userid);
+
+    // execute the sql statement
+    $result = $conn->query( $sql );
+    if ( ! $result )  // sql failed
+    {
+        die( "Could not execute SQL: <pre>$sql</pre> <br />" .  mysqli_error($conn) );
+    }
+
+    if ( mysqli_num_rows($result) == 0 )
+    {
+        die( "You are not validated for project # $project_id ($app_title)<br />" );
+    }
+}
+
+$compare_some_label = "Compare limited number of record/events";
+$skip_recs = 0;
+if (isset($_POST['skip_recs']) ) { $skip_recs = $_POST['skip_recs']; }
+$first_rec_num = $skip_recs + 1;
+$rec_limit = 100;
+if (isset($_POST['rec_limit']) ) { $rec_limit = $_POST['rec_limit']; }
+$compare_some = 0;
+if (isset($_POST['submit']) and $_POST['submit'] == $compare_some_label) { $compare_some = 1; }
+if ($compare_some == 1 and ($skip_recs > 0 or $rec_limit > 0)) {
+	$limit_sql = "limit " . $skip_recs . ", $rec_limit";
+} else {
+	$limit_sql = "";
+}
 
 
-
-
-#require_once dirname(dirname(__FILE__)) . '/Config/init_project.php';
 
 
 include APP_PATH_DOCROOT  . 'ProjectGeneral/header.php';
@@ -46,11 +78,9 @@ renderPageTitle("<img src='".APP_PATH_IMAGES."page_copy.png'> 2 Project Data Com
 
 
 // Instructions
-#if ($double_data_entry) {
-	print "<p>" . $lang['data_comp_tool_03'];
-#} else {
-#	print "<p>" . $lang['data_comp_tool_04'];
-#}
+print "<p>This page may be used for comparing project records in this second entry project with the same records in the main project. <br/><br/>
+Select a record from the list below and hit the 'Compare' button. A comparison table will then be displayed showing the differences between the records. Only records that have been entered in this second entry project will be displayed in the selection box below and in the comparison table.<br/><br/>
+Alternatively, you can hit the 'Compare all records' button to compare all records.  If the project has too much data to compare all of the records at one time (e.g. when you try, it takes a long time and then you get an error message), then you can use the '$compare_some_label' button instead. You might need to try different numbers in the fields above that button to get a number that works well for you.";
 
 //If user is in DAG, only show info from that DAG and give note of that
 if ($user_rights['group_id'] != "") {
@@ -70,8 +100,10 @@ foreach ($Proj->metadata as $field=>$attr) {
 
 
 // Set flag to compare ALL records/events instead of single pair of records/events
-#$compareAll = ($double_data_entry && isset($_POST['compare-all']) && $_POST['compare-all']);
 $compareAll = (isset($_POST['compare-all']) && $_POST['compare-all']);
+if (isset($_GET['rec_limit']) ) {
+   $compareAll = (isset($_GET['rec_limit']) );
+}
 
 
 
@@ -84,55 +116,28 @@ if ($user_rights['group_id'] == "") {
 } else {
 	$group_sql  = "and d.record in (" . pre_query("select record from redcap_data where project_id = $project_id and field_name = '__GROUPID__' and value = '".$user_rights['group_id']."'") . ")"; 
 }
-#$rs_ids_sql = "select d.record, d.event_id from redcap_data d, redcap_events_metadata m, redcap_events_arms a 
-#			   where d.project_id = $project_id and a.project_id = d.project_id and a.arm_id = m.arm_id and d.field_name = '$table_pk' $group_sql 
-#			   and d.event_id = m.event_id order by abs(d.record), d.record, a.arm_num, m.day_offset, m.descrip";
 $rs_ids_sql = "select d2.record, d2.event_id, m1.event_id as event_id1 from redcap_data d2, redcap_events_metadata m2, redcap_events_arms a2, redcap_events_metadata m1, redcap_events_arms a1
 			   where d2.project_id = $project_id and a2.project_id = d2.project_id and a2.arm_id = m2.arm_id and d2.field_name = '$table_pk' $group_sql 
 			   and d2.event_id = m2.event_id and d2.event_id = m2.event_id and a1.project_id = $pid1 and m1.arm_id = a1.arm_id and m1.descrip = m2.descrip
-                           order by abs(d2.record), d2.record, a2.arm_num, m2.day_offset, m2.descrip";
+                           order by abs(d2.record), d2.record, a2.arm_num, m2.day_offset, m2.descrip $limit_sql";
 $q = db_query($rs_ids_sql);
+$record_events_found = 0;
 // Collect record names into array
 $records  = array();
 while ($row = db_fetch_assoc($q)) 
 {
+	$record_events_found++;
 	// Add to array
 	$records[$row['record']][$row['event_id']] = $Proj->eventInfo[$row['event_id']]['name_ext'];
 	$event2s[$row['record']][$row['event_id']] = $row['event_id1'];
 }
-// DDE ONLY: Now loop through array and parse out 
-#if ($double_data_entry) 
-#{
-#	// Temp array
-#	$records2 = array();
-#	// Loop through all records
-#	foreach ($records as $this_record=>$this_event)
-#	{
-#		// Get real record name (i.e. w/o the --1 or --2 on the end)
-#		if (substr($this_record, -3) == '--1' || substr($this_record, -3) == '--2') {
-#			$this_record_real = substr($this_record, 0, -3);
-#		} else {
-#			$this_record_real = $this_record;
-#		}
-#		// Loop through the events for this record
-#		foreach ($this_event as $this_event_id=>$this_event_name)
-#		{
-#			// If both --1 and --2 records exist, then replace both with a single real record, else remove both
-#			if (isset($records[$this_record_real."--1"][$this_event_id]) && isset($records[$this_record_real."--2"][$this_event_id])) 
-#			{
-#				// Add to $records2 array
-#				$records2[$this_record_real][$this_event_id] = $Proj->eventInfo[$this_event_id]['name_ext'];
-#			}	
-#		}
-#	}
-#	// Swap arrays now
-#	$records = $records2;
-#	unset($records2);
-#}
 // Loop through the record list and store as string for drop-down options
 $id_dropdown = "";
 foreach ($records as $this_record=>$this_event)
 {
+	$id_dropdown .= "<option value='{$this_record}[__EVTID__]all_events[__EVTID__]all_events'>" 
+				  . $this_record . ($longitudinal ? " *** All events ***" : "") 
+				  . "</option>";
 	foreach ($this_event as $this_event_id=>$this_event_name)
 	{
 		$id_dropdown .= "<option value='{$this_record}[__EVTID__]{$this_event_id}[__EVTID__]".$event2s[$this_record][$this_event_id]."'>" 
@@ -143,16 +148,30 @@ foreach ($records as $this_record=>$this_event)
 
 // Give option to compare all DDE pairs of records on single page
 $compareAllBtn = '';
-#if ($double_data_entry) 
-#{
-	$disableCompAllBtn = (empty($records)) ? "disabled" : "";
-	$compareAllBtn = RCView::div(array('style'=>'padding:5px 0;font-weight:normal;color:#777;'),
-						"&mdash; {$lang['global_46']} &mdash;"
-					 ) .
-					 RCView::div('',
-						RCView::input(array('type'=>'submit','name'=>'submit','value'=>$lang['data_comp_tool_45'],$disableCompAllBtn=>$disableCompAllBtn,'onclick'=>"$('#record1').val($('#record1 option:eq(1)').val()); $('input[name=\"compare-all\"]').val('1');"))
-					 );
-#}
+$disableCompAllBtn = (empty($records)) ? "disabled" : "";
+$compareAllBtn = RCView::div(array('style'=>'padding:5px 0;font-weight:normal;color:#777;'),
+					"&mdash; {$lang['global_46']} &mdash;"
+				 ) .
+				 RCView::div('',
+					RCView::input(array('type'=>'submit','name'=>'submit','value'=>$lang['data_comp_tool_45'],$disableCompAllBtn=>$disableCompAllBtn,'onclick'=>"$('#record1').val($('#record1 option:eq(1)').val()); $('input[name=\"compare-all\"]').val('1');"))
+				 );
+if ($compare_some == 1) {
+	$new_skip = $skip_recs + $rec_limit;
+	if (empty($records)) {
+		$new_skip = 0;
+		$disableCompAllBtn = "";
+	}
+} else {
+	$new_skip = $skip_recs;
+}
+$compareSomeBtn = RCView::div(array('style'=>'padding:5px 0;font-weight:normal;color:#777;'),
+					"&mdash; {$lang['global_46']} &mdash;"
+				 ) .
+			         "Compare up to <input name='rec_limit' value=$rec_limit size=6 class='x-form-text x-form-field' style-'padding-right:0;height:22px;'> record/events,<br>" .
+			         "skipping the first <input name='skip_recs' value=$new_skip size=6 class='x-form-text x-form-field' style-'padding-right:0;height:22px;'> record/events" .
+				 RCView::div('',
+					RCView::input(array('type'=>'submit','name'=>'submit','value'=>$compare_some_label,$disableCompAllBtn=>$disableCompAllBtn,'onclick'=>"$('#record1').val($('#record1 option:eq(1)').val()); $('input[name=\"compare-some\"]').val('5-10');"))
+				 );
 
 
 // Table to choose record (show ONLY 1 pulldown for true Double Data Entry comparison)
@@ -169,8 +188,11 @@ print "<table class='form_border'>
 						return false;
 					}
 				\">
-				$compareAllBtn
+				$compareAllBtn 
 				<input type='hidden' name='compare-all' value='0'>
+			</td>
+			<td class='label_header' style='padding:10px;' rowspan='2'>
+				$compareSomeBtn
 			</td>
 		</tr>
 		<tr>
@@ -178,13 +200,6 @@ print "<table class='form_border'>
 				<select name='record1' id='record1' class='x-form-text x-form-field' style='padding-right:0;height:22px;'>
 					<option value=''>--- {$lang['data_comp_tool_43']} ---</option>
 					$id_dropdown";						
-#if (!$double_data_entry) 
-#{
-#	print  " 	</select> &nbsp;&nbsp;
-#				<select name='record2' id='record2' class='x-form-text x-form-field' style='padding-right:0;height:22px;'>
-#					<option value=''>--- {$lang['data_comp_tool_43']} ---</option>
-#					$id_dropdown";
-#}	
 print  "		</select></td>";
 print  "</tr>
 		</table>";
@@ -231,10 +246,15 @@ if (isset($_POST['submit']))
 			</div>";
 	
 	// If only comparing a single pair of records/events
-	if (!$compareAll) {
+	if (!$compareAll and !$compare_some) {
 		list ($record1, $event_id1, $event_id2) = explode("[__EVTID__]", $_POST['record1']);
-		$records = array($record1=>array($event_id1=>1));
-		$event2s = array($record1=>array($event_id1=>$event_id2));
+		if ($event_id1 == 'all_events') {
+			$event2s = array($record1=>$event2s[$record1]);
+			$records = array($record1=>$records[$record1]);
+		} else {
+			$records = array($record1=>array($event_id1=>1));
+			$event2s = array($record1=>array($event_id1=>$event_id2));
+		}
 	}
 			
 	// Retrieve all validation types
@@ -245,37 +265,23 @@ if (isset($_POST['submit']))
 	
 	//print_array($records);
 	
+	if ($compare_some == 1) 
+	{
+		print "<h1>Comparison of $record_events_found record/events starting with record/event # $first_rec_num:</h1>";
+	}
+
 	// Loop through records
 	foreach ($records as $record1=>$evts) 
 	{
-
 		// Retrieve the submitted record names and their corresponding event_ids
-#		if ($double_data_entry) {
-#			$record2 = $record1 . "--2";
-#			$record1 .= "--1";
-			$record2 = $record1;
-#		} else {
-#			list ($record2, $event_id2) = explode("[__EVTID__]", $_POST['record2']);
-#		}
+		$record2 = $record1;
 		
 		// Loop through events for this record
 		#foreach (array_keys($evts) as $event_id1) 
 		foreach ($evts as $event_id1=>$event_name1) 
 		{
 			// Retrieve the submitted record names and their corresponding event_ids
-#			if ($double_data_entry) {
-#				$event_id2 = $event_id1;
-				$event_id2 = $event2s[$record1][$event_id1];
-#			}
-			
-			// Check to make sure the user didn't select the same record twice	
-#			if ($record1."" === $record2."" && $event_id2 == $event_id1 && $record1 != "" && $record2 != "") {
-#				print "<hr size=1><p><font color=#800000><b>{$lang['data_comp_tool_10']} ($record1) {$lang['data_comp_tool_11']}</b></font><p><br>";
-#				if (!$compareAll) {
-#					include APP_PATH_DOCROOT . 'ProjectGeneral/footer.php';
-#					exit;
-#				}
-#			}
+			$event_id2 = $event2s[$record1][$event_id1];
 			
 			// Retrieve data values for record 1
 			$sql = "select record, field_name, value from redcap_data where record = '".prep($record1)."' 
@@ -289,6 +295,7 @@ if (isset($_POST['submit']))
                                         and exists (select 'x' from redcap_metadata r2 where r2.project_id = $project_id and r2.field_name = r1.field_name)";
 			$q = db_query($sql);
 			$record2_data = eavDataArray($q, $chkbox_fields);
+
 			
 			// Retrieve metadata fields that are only relevent here for data comparison (only get fields that we have data for)
 			$metadata_fields_rec1rec2 = array_unique(array_merge(array_keys($record1_data[$record1]), array_keys($record2_data[$record2])));
@@ -310,24 +317,6 @@ if (isset($_POST['submit']))
 									{$lang['data_comp_tool_17']}
 								</p>";
 
-#			if ($double_data_entry) {		
-#
-#				//Check to see if the record has been created before. If so, then stop here.
-#				$record3 = substr($record1, 0, -3);
-#				$event_id3 = $event_id1;
-#				$sql = "select distinct record from redcap_data where project_id = $project_id and record = '".prep($record3)."' and field_name = '$table_pk'";
-#				if ($longitudinal) $sql .= " and event_id = $event_id3";
-#				$q = db_query($sql);
-#				// Retrieve data values for record 2
-#				$sql = "select record, field_name, value from redcap_data where record = '".prep($record3)."' and project_id = $project_id
-#						and event_id = $event_id3";
-#				$q = db_query($sql);
-#				$record3_data = eavDataArray($q, $chkbox_fields);
-#					
-#								  
-#			}
-			
-			
 			$display_string .= "<div style='max-width:700px;'>
 								<form action='".PAGE_FULL."?pid=$project_id&event_id=$event_id1&create_new=1' method='post' enctype='multipart/form-data' name='create_new' target='_self'>
 								<table class='form_border'>
@@ -336,7 +325,7 @@ if (isset($_POST['submit']))
 									<td class='header' style='font-size:8pt;text-align:center;' rowspan=2>{$lang['global_12']}</td>";
 			
 				$display_string .= "<td class='header' style='font-size:8pt;text-align:center;' colspan='2'>
-										<font color=#800000>$table_pk_label</font>"
+										<font color=#800000>$table_pk_label</font> $record1"
 										. ($longitudinal ? "<br/><div style='font-size:11px;'>".$Proj->eventInfo[$event_id1]['name_ext']."</div>" : "") . "
 									</td>
 								</tr>";
@@ -344,10 +333,10 @@ if (isset($_POST['submit']))
 			
 			$display_string .= "<tr>
 									<td class='data' valign='bottom' style='text-align:center;color:#000066;'>
-										<b>This $record1</b>
+										<b>First Entry</b>
 									</td>
 									<td class='data' style='text-align:center;color:#000066;'>
-										<b>Other $record2</b>
+										<b>Second Entry</b>
 									</td>";
 			
 			$display_string .= "</tr>";
@@ -473,11 +462,11 @@ if (isset($_POST['submit']))
 											<td class='data' style='padding:2px 5px;'>
 												".$Proj->forms[$form_name]['menu']."
 											</td>
-											<td valign='top' class='data' style='padding:2px 5px;cursor:pointer;' onclick=\"window.open('" . APP_PATH_WEBROOT . "DataEntry/index.php?pid=$project_id&page=$form_name&id=$record1&event_id=$event_id1&fldfocus=$field_name#$field_name-tr','_blank');\">
-												<span class=\"compare\" style='color:#800000;'>$this_val1</span>
-											</td>
 											<td valign='top' class='data' style='padding:2px 5px;cursor:pointer' onclick=\"window.open('" . APP_PATH_WEBROOT . "DataEntry/index.php?pid=$pid1&page=$form_name&id=$record2&event_id=$event_id2&fldfocus=$field_name#$field_name-tr','_blank');\">
 												<span class=\"compare\" style='color:#800000;'>$this_val2</span>
+											</td>
+											<td valign='top' class='data' style='padding:2px 5px;cursor:pointer;' onclick=\"window.open('" . APP_PATH_WEBROOT . "DataEntry/index.php?pid=$project_id&page=$form_name&id=$record1&event_id=$event_id1&fldfocus=$field_name#$field_name-tr','_blank');\">
+												<span class=\"compare\" style='color:#800000;'>$this_val1</span>
 											</td>";
 						
 						$diff .= "</tr>";
@@ -500,21 +489,17 @@ if (isset($_POST['submit']))
 			
 			// If no differences, then give message.
 			} else {
-			
+			    if ( !$record2_data ) {
+				print  "<hr size=1><font color=#800000><b>The record named $record1 {$lang['global_108']} $event_name1
+						does not exist in the main project.</b></font> ";
+			    } else {
 				print  "<hr size=1><font color=#800000><b>{$lang['data_comp_tool_34']} $record1 {$lang['global_108']} $event_name1
 						{$lang['data_comp_tool_35']}</b></font> ";
-#					if ($double_data_entry) {
-#						print "<p>{$lang['data_comp_tool_37']} " . substr($record1, 0, -3) . $lang['data_comp_tool_39'] . "</p>
-#							  <form action=\"".PAGE_FULL."?pid=$project_id&event_id=$event_id1&create_new=1\" method=\"post\" enctype=\"multipart/form-data\" target=\"_self\">
-#							  <input name=\"$table_pk\" type=\"hidden\" value=\"$record1\">
-#							  <input type=\"submit\" value=\"{$lang['data_comp_tool_38']} " . substr($record1, 0, -3) . "\"></form><p><br>";
-#					}
-				
+			    }
 			}
 			// Increment counter
 			$loopNum++;
 		}
-#if ($loopNum > 10) { exit; }
 	}
 }
 
