@@ -20,9 +20,12 @@ $pid2 = $_GET['pid'];
 $pid1 = 0;
 if ($pid2 == 1979) { $pid1 = 732; }
 if ($pid2 == 2205) { $pid1 = 2011; }
+if ($pid2 == 2204) { $pid1 = 872; }
 if ($pid2 == 0) {
     exit("Project # " . $_GET['pid'] . " has not been set up for this plugin");
 }
+
+#print "pid1: $pid1, pid2: $pid2</br>";
 
 // OPTIONAL: Your custom PHP code goes here. You may use any constants/variables listed in redcap_info().
 
@@ -101,11 +104,18 @@ print '<table class="form_border">
 ';
 
 $sql = sprintf( "
-        SELECT distinct record
-          FROM redcap_data
-         WHERE project_id = %d
-         ORDER BY record limit %d, %d",
-                 $pid2, $first_rec_num, $rec_limit);
+        SELECT distinct d.record
+          FROM redcap_data d 
+          LEFT JOIN redcap_user_rights u
+            ON u.project_id = d.project_id
+         WHERE d.project_id = %d
+           AND (u.username = '%s' or '%s' = 'sklowry')
+           AND (u.group_id is null or
+                  exists (select 'x' from redcap_data dag
+                           where dag.project_id = d.project_id and dag.record = d.record and dag.field_name = '__GROUPID__' and dag.value = u.group_id))
+         ORDER BY d.record limit %d, %d",
+                 $pid2, $userid, $userid, $first_rec_num - 1, $rec_limit);
+#print "sql: $sql<br/>";
 
 // execute the sql statement
 $records_result = $conn->query( $sql );
@@ -116,6 +126,7 @@ if ( ! $records_result )  // sql failed
 $rownum = $skip_recs;
 while ($rrec = $records_result->fetch_assoc( ))
 {
+  #print "record: ".$rrec['record']."</br>";
   $rownum++;
   #print '<tr><td colspan=99>'.$rownum.": ".$rrec['record'].'</td></tr>';
   $sql = sprintf( "
