@@ -441,7 +441,7 @@ if (isset($_POST['submit']))
 					}
 					
 					//print out values if there is a difference bewteen data for each entered id				
-					if ($this_val1 != $this_val2) {
+					if (strtolower($this_val1) != strtolower($this_val2)) {
 							
 						// Remove any illegal characters that can cause javascript to crash
 						$this_val1 = $this_val1_orig = htmlspecialchars(html_entity_decode(html_entity_decode($this_val1, ENT_QUOTES), ENT_QUOTES), ENT_QUOTES);
