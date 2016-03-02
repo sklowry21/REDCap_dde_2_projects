@@ -20,16 +20,34 @@ require_once "../redcap_connect.php";
 if (!isset($_GET['pid'])) {
     exit("Project ID is required");
 }
+$lookup_pid = 2816;
 $pid2 = $_GET['pid'];
 $pid1 = 0;
-if ($pid2 == 1979) { $pid1 = 732; } # Copy of MN Ambit Clinical Database for testing / MN Ambit Clinical Database
-if ($pid2 == 2766) { $pid1 = 2232; } # CENIC Project 1, Study 2 - Visit Data
-if ($pid2 == 2205) { $pid1 = 2011; } # CENIC Project 2 - Visit Data - Second Entry / CENIC Project 2 - Visit Data
-if ($pid2 == 2765) { $pid1 = 2231; } # CENIC Project 3 - Visit Data
-if ($pid2 == 2204) { $pid1 = 872; } # COMET, Project 4 - Second Entry / COMET, Project 4
-if ($pid2 == 2394) { $pid1 = 1204; } # Novel 2 - Second Entry / Novel 2
-if ($pid2 == 2690) { $pid1 = 2120; } # Clearway 2014_secondentry / Clearway 2014
-if ($pid2 == 0) {
+
+$sql = sprintf( "
+        select redcap_project_1.value as pid1
+          from redcap_data redcap_project_2, redcap_data redcap_project_1
+         where redcap_project_2.project_id = %d
+           and redcap_project_2.field_name = 'redcap_project_2'
+           and redcap_project_2.value = %d
+           and redcap_project_1.project_id = redcap_project_2.project_id
+           and redcap_project_1.record = redcap_project_2.record
+           and redcap_project_1.field_name = 'redcap_project_1' ",
+                 $lookup_pid, $pid2);
+
+// execute the sql statement
+$pid_result = $conn->query($sql);
+if ( ! $pid_result ) { // sql failed
+    die( "Could not execute SQL: <pre>$sql</pre> <br />" .  mysqli_error($conn) );
+}
+if ( mysqli_num_rows($pid_result) == 0 ) {
+    exit("Project # " . $pid2 . " has not been set up for this plugin");
+}
+while ($row = $pid_result->fetch_assoc()) {
+    $pid1 = $row['pid1'];
+}
+ 
+if ($pid1 == 0) {
     exit("Project # " . $_GET['pid'] . " has not been set up for this plugin");
 }
 
@@ -246,7 +264,7 @@ if (isset($_POST['submit']))
 	
 	// PRINT PAGE button
 	print  "<div style='text-align:right;max-width:700px;'>
-				<button class='jqbuttonmed' onclick='printpage(this)'><img src='".APP_PATH_IMAGES."printer.png' class='imgfix'> Print page</button>
+				<button class='jqbuttonmed' onclick='window.print();'><img src='".APP_PATH_IMAGES."printer.png' class='imgfix'> Print page</button>
 			</div>";
 	
 	// If only comparing a single pair of records/events
