@@ -26,6 +26,7 @@ if ($pid2 == 1979) { $pid1 = 732; } # Copy of MN Ambit Clinical Database for tes
 if ($pid2 == 2205) { $pid1 = 2011; } # CENIC Project 2 - Visit Data - Second Entry / CENIC Project 2 - Visit Data
 if ($pid2 == 2204) { $pid1 = 872; } # COMET, Project 4 - Second Entry / COMET, Project 4
 if ($pid2 == 2394) { $pid1 = 1204; } # Novel 2 - Second Entry / Novel 2
+if ($pid2 == 2690) { $pid1 = 2120; } # Clearway 2014_secondentry / Clearway 2014
 if ($pid2 == 0) {
     exit("Project # " . $_GET['pid'] . " has not been set up for this plugin");
 }
@@ -114,12 +115,14 @@ if (isset($_GET['rec_limit']) ) {
 if ($user_rights['group_id'] == "") {
 	$group_sql  = ""; 
 } else {
-	$group_sql  = "and d.record in (" . pre_query("select record from redcap_data where project_id = $project_id and field_name = '__GROUPID__' and value = '".$user_rights['group_id']."'") . ")"; 
+	$group_sql  = "and d2.record in (" . pre_query("select record from redcap_data where project_id = $project_id and field_name = '__GROUPID__' and value = '".$user_rights['group_id']."'") . ")"; 
 }
+#print "<br/>group_sql: $group_sql<br/>";
 $rs_ids_sql = "select d2.record, d2.event_id, m1.event_id as event_id1 from redcap_data d2, redcap_events_metadata m2, redcap_events_arms a2, redcap_events_metadata m1, redcap_events_arms a1
 			   where d2.project_id = $project_id and a2.project_id = d2.project_id and a2.arm_id = m2.arm_id and d2.field_name = '$table_pk' $group_sql 
 			   and d2.event_id = m2.event_id and d2.event_id = m2.event_id and a1.project_id = $pid1 and m1.arm_id = a1.arm_id and m1.descrip = m2.descrip
                            order by abs(d2.record), d2.record, a2.arm_num, m2.day_offset, m2.descrip $limit_sql";
+#print "<br/>rs_ids_sql: $rs_ids_sql<br/>";
 $q = db_query($rs_ids_sql);
 $record_events_found = 0;
 // Collect record names into array
@@ -135,9 +138,11 @@ while ($row = db_fetch_assoc($q))
 $id_dropdown = "";
 foreach ($records as $this_record=>$this_event)
 {
-	$id_dropdown .= "<option value='{$this_record}[__EVTID__]all_events[__EVTID__]all_events'>" 
+	if ($longitudinal) {
+		$id_dropdown .= "<option value='{$this_record}[__EVTID__]all_events[__EVTID__]all_events'>" 
 				  . $this_record . ($longitudinal ? " *** All events ***" : "") 
 				  . "</option>";
+	}
 	foreach ($this_event as $this_event_id=>$this_event_name)
 	{
 		$id_dropdown .= "<option value='{$this_record}[__EVTID__]{$this_event_id}[__EVTID__]".$event2s[$this_record][$this_event_id]."'>" 
