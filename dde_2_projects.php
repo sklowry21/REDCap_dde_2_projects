@@ -5,7 +5,6 @@
  *              being used for partial DDE for the first project, so it only compares data for 
  *              records/events/forms that have data in the second project.
  * VERSION:     1.0
- *              ***** SHOULD ADD DAG FUNCTIONALITY *****
  * AUTHOR:      Sue Lowry - University of Minnesota
  */
 
@@ -18,9 +17,10 @@ if (!isset($_GET['pid'])) {
 }
 $pid2 = $_GET['pid'];
 $pid1 = 0;
-if ($pid2 == 1979) { $pid1 = 732; }
-if ($pid2 == 2205) { $pid1 = 2011; }
-if ($pid2 == 2204) { $pid1 = 872; }
+if ($pid2 == 1979) { $pid1 = 732; } # Copy of MN Ambit Clinical Database for testing / MN Ambit Clinical Database
+if ($pid2 == 2205) { $pid1 = 2011; } # CENIC Project 2 - Visit Data - Second Entry / CENIC Project 2 - Visit Data
+if ($pid2 == 2204) { $pid1 = 872; } # COMET, Project 4 - Second Entry / COMET, Project 4
+if ($pid2 == 2394) { $pid1 = 1204; } # Novel 2 - Second Entry / Novel 2
 if ($pid2 == 0) {
     exit("Project # " . $_GET['pid'] . " has not been set up for this plugin");
 }
@@ -146,7 +146,7 @@ while ($rrec = $records_result->fetch_assoc( ))
              AND rem1.descrip = rem2.descrip
            ORDER BY rea1.arm_num, rem2.day_offset, rem2.descrip, fn.field_order",
                    $rrec['record'], $pid2, $pid1);
-//print "sql: $sql<br/>";
+  #print "sql: $sql<br/><br/>";
 
   // execute the sql statement
   $events_result = $conn->query( $sql );
@@ -188,8 +188,8 @@ while ($rrec = $records_result->fetch_assoc( ))
                and (p1.value_1 <> p2.value_2 or (p1.value_1 is null and p2.value_2 is not null) or (p1.value_1 is not null and p2.value_2 is null))
              order by p2.form_name, p2.field_order",
                      $pid2, $rrec['record'], $erec['event_id_2'], $pid1, $pid2, $erec['form_name'], $pid1, $rrec['record'], $erec['event_id_1'], $pid1, $pid2, $erec['form_name']);
+    #print "sql: $sql<br/><br/>";
 
-//print "sql: $sql<br/>";
     // execute the sql statement
     $data_results = $conn->query( $sql );
     if ( ! $data_results )  // sql failed
@@ -200,6 +200,7 @@ while ($rrec = $records_result->fetch_assoc( ))
     {
       if ($drec['value_1'] > ' ') { $value_1 = $drec['value_1']; } else { $value_1 = '<i>blank</i>'; }
       if ($drec['value_2'] > ' ') { $value_2 = $drec['value_2']; } else { $value_2 = '<i>blank</i>'; }
+      #print "<tr><td colspan=99>value_1: ".$drec['value_1'].", value_2: ".$drec['value_2'].", new value1: ".$value_1.", new value2: ".$value_2."</td></tr>";
       print '<tr>
 <td class="data" style="padding:2px 5px;">' . $drec['element_label'] . ' (<i>' . $drec['field_name'] . '</i>)</td>
 <td class="data" style="padding:2px 5px;">' . $erec['event_descrip'] . '</td>
