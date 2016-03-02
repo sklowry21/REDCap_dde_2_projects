@@ -15,7 +15,7 @@
 
 // Call the REDCap Connect file in the main "redcap" directory
 require_once "../redcap_connect.php";
-require_once APP_PATH_DOCROOT . 'Reports/functions.php';
+#require_once APP_PATH_DOCROOT . 'Reports/functions.php';
 
 if (!isset($_GET['pid'])) {
     exit("Project ID is required");
@@ -23,7 +23,9 @@ if (!isset($_GET['pid'])) {
 $pid2 = $_GET['pid'];
 $pid1 = 0;
 if ($pid2 == 1979) { $pid1 = 732; } # Copy of MN Ambit Clinical Database for testing / MN Ambit Clinical Database
+if ($pid2 == 2766) { $pid1 = 2232; } # CENIC Project 1, Study 2 - Visit Data
 if ($pid2 == 2205) { $pid1 = 2011; } # CENIC Project 2 - Visit Data - Second Entry / CENIC Project 2 - Visit Data
+if ($pid2 == 2765) { $pid1 = 2231; } # CENIC Project 3 - Visit Data
 if ($pid2 == 2204) { $pid1 = 872; } # COMET, Project 4 - Second Entry / COMET, Project 4
 if ($pid2 == 2394) { $pid1 = 1204; } # Novel 2 - Second Entry / Novel 2
 if ($pid2 == 2690) { $pid1 = 2120; } # Clearway 2014_secondentry / Clearway 2014
@@ -32,7 +34,6 @@ if ($pid2 == 0) {
 }
 
 #print "pid1: $pid1, pid2: $pid2</br>";
-
 if (!SUPER_USER) {
     $sql = sprintf( "
             SELECT p.app_title
@@ -71,7 +72,6 @@ if ($compare_some == 1 and ($skip_recs > 0 or $rec_limit > 0)) {
 
 
 
-
 include APP_PATH_DOCROOT  . 'ProjectGeneral/header.php';
 include APP_PATH_DOCROOT . 'ProjectGeneral/form_renderer_functions.php';
 
@@ -105,7 +105,6 @@ $compareAll = (isset($_POST['compare-all']) && $_POST['compare-all']);
 if (isset($_GET['rec_limit']) ) {
    $compareAll = (isset($_GET['rec_limit']) );
 }
-
 
 
 
@@ -414,11 +413,11 @@ if (isset($_POST['submit']))
 								$thistime2 = "";
 							}				
 							if (substr($Proj->metadata[$sub_field_name]['element_validation_type'], -4) == '_dmy') {
-								$this_val1 = trim(date_ymd2dmy($thisdate1) . " " . $thistime1);
-								$this_val2 = trim(date_ymd2dmy($thisdate2) . " " . $thistime2);
+								$this_val1 = trim(DateTimeRC::date_ymd2dmy($thisdate1) . " " . $thistime1);
+								$this_val2 = trim(DateTimeRC::date_ymd2dmy($thisdate2) . " " . $thistime2);
 							} elseif (substr($Proj->metadata[$sub_field_name]['element_validation_type'], -4) == '_mdy') {
-								$this_val1 = trim(date_ymd2mdy($thisdate1) . " " . $thistime1);
-								$this_val2 = trim(date_ymd2mdy($thisdate2) . " " . $thistime2);
+								$this_val1 = trim(DateTimeRC::date_ymd2mdy($thisdate1) . " " . $thistime1);
+								$this_val2 = trim(DateTimeRC::date_ymd2mdy($thisdate2) . " " . $thistime2);
 							}
 						}
 					}
@@ -481,7 +480,6 @@ if (isset($_POST['submit']))
 				
 			}
 			
-			
 			// Display table if there were any differences.
 			if ($diff != "") {
 			
@@ -507,5 +505,6 @@ if (isset($_POST['submit']))
 		}
 	}
 }
+
 
 include APP_PATH_DOCROOT . 'ProjectGeneral/footer.php';
