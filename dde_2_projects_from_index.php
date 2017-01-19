@@ -314,7 +314,7 @@ if (isset($_POST['submit']))
 			// Retrieve data values for record 2
 			$sql = "select r1.record, r1.field_name, r1.value from redcap_data r1 where r1.record = '".prep($record2)."' 
 					and r1.project_id = $pid1 and r1.event_id = $event_id2 
-                                        and exists (select 'x' from redcap_metadata r2 where r2.project_id = $project_id and r2.field_name = r1.field_name)";
+                                        and exists (select 'x' from redcap_metadata r2, redcap_events_forms ef where r2.project_id = $project_id and r2.field_name = r1.field_name and ef.event_id = $event_id1 and ef.form_name = r2.form_name)";
 			$q = db_query($sql);
 			$record2_data = eavDataArray($q, $chkbox_fields);
 
