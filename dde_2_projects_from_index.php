@@ -310,6 +310,7 @@ if (isset($_POST['submit']))
 					and project_id = $project_id and event_id = $event_id1";
 			$q = db_query($sql);
 			$record1_data = eavDataArray($q, $chkbox_fields);
+			$record1_key = key($record1_data);
 		
 			// Retrieve data values for record 2
 			$sql = "select r1.record, r1.field_name, r1.value from redcap_data r1 where r1.record = '".prep($record2)."' 
@@ -317,6 +318,7 @@ if (isset($_POST['submit']))
                                         and exists (select 'x' from redcap_metadata r2, redcap_events_forms ef where r2.project_id = $project_id and r2.field_name = r1.field_name and ef.event_id = $event_id1 and ef.form_name = r2.form_name)";
 			$q = db_query($sql);
 			$record2_data = eavDataArray($q, $chkbox_fields);
+			$record2_key = key($record2_data);
 
 			
 			// Retrieve metadata fields that are only relevent here for data comparison (only get fields that we have data for)
@@ -513,6 +515,9 @@ if (isset($_POST['submit']))
 			    if ( !$record2_data ) {
 				print  "<hr size=1><font color=#800000><b>The record named $record1 {$lang['global_108']} $event_name1
 						does not exist in the main project.</b></font> ";
+			    } elseif ($record1_key <> $record2_key) {
+				print "<hr size=1><font color=#800000><b>The IDs do not match, which must mean that the upper/loser case doesn't match<br/>
+						&nbsp; First entry: $record1_key, Second entry: $record2_key</b></font>";
 			    } else {
 				print  "<hr size=1><font color=#800000><b>{$lang['data_comp_tool_34']} $record1 {$lang['global_108']} $event_name1
 						{$lang['data_comp_tool_35']}</b></font> ";
