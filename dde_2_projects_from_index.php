@@ -10,6 +10,7 @@
  *              being used for partial DDE for the first project, so it only compares data for
  *              records/events/forms that have data in the second project.
  * VERSION:     1.0
+ *              2.0 Updated to work with REDCap version 7.0.13
  * AUTHOR:      Sue Lowry - University of Minnesota
  */
 
@@ -137,7 +138,7 @@ if ($user_rights['group_id'] == "") {
 #print "<br/>group_sql: $group_sql<br/>";
 $rs_ids_sql = "select d2.record, d2.event_id, m1.event_id as event_id1 from redcap_data d2, redcap_events_metadata m2, redcap_events_arms a2, redcap_events_metadata m1, redcap_events_arms a1
 			   where d2.project_id = $project_id and a2.project_id = d2.project_id and a2.arm_id = m2.arm_id and d2.field_name = '$table_pk' $group_sql 
-			   and d2.event_id = m2.event_id and d2.event_id = m2.event_id and a1.project_id = $pid1 and m1.arm_id = a1.arm_id and m1.descrip = m2.descrip
+			   and d2.instance is null and d2.event_id = m2.event_id and d2.event_id = m2.event_id and a1.project_id = $pid1 and m1.arm_id = a1.arm_id and m1.descrip = m2.descrip
                            order by abs(d2.record), d2.record, a2.arm_num, m2.day_offset, m2.descrip $limit_sql";
 #print "<br/>rs_ids_sql: $rs_ids_sql<br/>";
 $q = db_query($rs_ids_sql);
@@ -198,6 +199,8 @@ $compareSomeBtn = RCView::div(array('style'=>'padding:5px 0;font-weight:normal;c
 
 // Table to choose record (show ONLY 1 pulldown for true Double Data Entry comparison)
 print "<form action=\"".PAGE_FULL."?pid=$project_id\" method=\"post\" enctype=\"multipart/form-data\" name=\"datacomp\" target=\"_self\">";
+// In new DataComparisonController:
+#print "<form action=\"".APP_PATH_WEBROOT."index.php?pid=".PROJECT_ID."&route=DataComparisonController:index\" method=\"post\" enctype=\"multi">";
 print "<table class='form_border'>
 		<tr>
 			<td class='label_header' style='padding:10px;'>
@@ -289,7 +292,7 @@ if (isset($_POST['submit']))
 	
 	if ($compare_some == 1) 
 	{
-		print "<h1>Comparison of $record_events_found record/events starting with record/event # $first_rec_num:</h1>";
+		print "<h2>Comparison of $record_events_found record/events starting with record/event # $first_rec_num:</h2>";
 	}
 
 	// Loop through records
@@ -306,20 +309,25 @@ if (isset($_POST['submit']))
 			$event_id2 = $event2s[$record1][$event_id1];
 			
 			// Retrieve data values for record 1
-			$sql = "select record, field_name, value from redcap_data where record = '".prep($record1)."' 
-					and project_id = $project_id and event_id = $event_id1";
+			$sql = "select record, field_name, value from redcap_data where record = '".db_escape($record1)."' 
+					and project_id = $project_id and event_id = $event_id1 and instance is null";
 			$q = db_query($sql);
 			$record1_data = eavDataArray($q, $chkbox_fields);
 			$record1_key = key($record1_data);
+
+			if ($longitudinal) { 
+				$ck_evt_forms = " and exists (select 'x' from redcap_metadata r2, redcap_events_forms ef where r2.project_id = $project_id and r2.field_name = r1.field_name and ef.event_id = $event_id1 and ef.form_name = r2.form_name)";
+			} else { 
+				$ck_evt_forms = '';
+			}
 		
 			// Retrieve data values for record 2
-			$sql = "select r1.record, r1.field_name, r1.value from redcap_data r1 where r1.record = '".prep($record2)."' 
-					and r1.project_id = $pid1 and r1.event_id = $event_id2 
-                                        and exists (select 'x' from redcap_metadata r2, redcap_events_forms ef where r2.project_id = $project_id and r2.field_name = r1.field_name and ef.event_id = $event_id1 and ef.form_name = r2.form_name)";
+			$sql = "select r1.record, r1.field_name, r1.value from redcap_data r1 where r1.record = '".db_escape($record2)."' 
+					and r1.project_id = $pid1 and r1.event_id = $event_id2  and instance is null
+                                        $ck_evt_forms";
 			$q = db_query($sql);
 			$record2_data = eavDataArray($q, $chkbox_fields);
 			$record2_key = key($record2_data);
-
 			
 			// Retrieve metadata fields that are only relevent here for data comparison (only get fields that we have data for)
 			$metadata_fields_rec1rec2 = array_unique(array_merge(array_keys($record1_data[$record1]), array_keys($record2_data[$record2])));
@@ -407,7 +415,7 @@ if (isset($_POST['submit']))
 					$subloop[1][$field_name] = $record1_data[$record1][$field_name];
 					$subloop[2][$field_name] = $record2_data[$record2][$field_name];	
 				}
-				
+
 				// Loop through all sub-fields, if a checkbox, else it'll just loop once
 				foreach (array_keys($subloop[1]) as $sub_field_name) 
 				{
@@ -444,7 +452,6 @@ if (isset($_POST['submit']))
 					
 					//print out values if there is a difference bewteen data for each entered id				
 					if (strtolower($this_val1) != strtolower($this_val2)) {
-							
 						// Remove any illegal characters that can cause javascript to crash
 						$this_val1 = $this_val1_orig = htmlspecialchars(html_entity_decode(html_entity_decode($this_val1, ENT_QUOTES), ENT_QUOTES), ENT_QUOTES);
 						$this_val2 = $this_val2_orig = htmlspecialchars(html_entity_decode(html_entity_decode($this_val2, ENT_QUOTES), ENT_QUOTES), ENT_QUOTES);
@@ -481,6 +488,7 @@ if (isset($_POST['submit']))
 							
 							$diff .=  	"<tr>
 											<td class='data' style='padding:2px 5px;'>
+<!-- field_name: $field_name, table_pk: $table_pk<br/> --!>
 												$disp_element_label <i>($disp_field_name)</i>
 											</td>
 											<td class='data' style='padding:2px 5px;'>
@@ -516,8 +524,8 @@ if (isset($_POST['submit']))
 				print  "<hr size=1><font color=#800000><b>The record named $record1 {$lang['global_108']} $event_name1
 						does not exist in the main project.</b></font> ";
 			    } elseif ($record1_key <> $record2_key) {
-				print "<hr size=1><font color=#800000><b>The IDs do not match, which must mean that the upper/loser case doesn't match<br/>
-						&nbsp; First entry: $record1_key, Second entry: $record2_key</b></font>";
+ 				print "<hr size=1><font color=#800000><b>The IDs do not match, which must mean that the upper/loser case doesn't match<br/>
+ 					&nbsp; First entry: $record1_key, Second entry: $record2_key</b></font>";
 			    } else {
 				print  "<hr size=1><font color=#800000><b>{$lang['data_comp_tool_34']} $record1 {$lang['global_108']} $event_name1
 						{$lang['data_comp_tool_35']}</b></font> ";
@@ -531,3 +539,54 @@ if (isset($_POST['submit']))
 
 
 include APP_PATH_DOCROOT . 'ProjectGeneral/footer.php';
+
+        //Function uses resource link from query to EAV formatted table and outputs an array
+        //with keys as 'record' and sub-arrays with keys as 'field_name' and value as 'value'
+        function eavDataArray($resource_link, $chkbox_fields = null)
+        {
+                // If array with of checkbox fields (with field_name as key and default value options of "0" as sub-array values) is not provided, then build one
+                if (!isset($chkbox_fields) || $chkbox_fields == null) {
+                        $sql = "select field_name from redcap_metadata where project_id = " . PROJECT_ID . " and element_type = 'checkbox'";
+                        $chkboxq = db_query($sql);
+                        $chkbox_fields = array();
+                        while ($row = db_fetch_assoc($chkboxq)) {
+                                // Add field to list of checkboxes and to each field add checkbox choices
+                                foreach (parseEnum($row['element_enum']) as $this_value=>$this_label) {
+                                        $chkbox_fields[$row['field_name']][$this_value] = "0";
+                                }
+                        }
+                }
+                // Add data from data table to array
+                $result = array();
+                $chkbox_values = array();
+                while ($row = db_fetch_array($resource_link)) {
+                        if (!isset($chkbox_fields[$row['field_name']])) {
+                                // Non-checkbox field
+                                $result[$row['record']][$row['field_name']] = $row['value'];
+                        } else {
+                                // If a checkbox
+                                $chkbox_values[$row['record']][$row['field_name']][$row['value']] = "1";
+                        }
+                }
+                // Now loop through each record. First add default "0" values for checkboxes, then overlay with any "1"s (actual checks from earlier)
+                foreach (array_keys($result) as $this_record) {
+                        // First add default "0" values to each record
+                        foreach ($chkbox_fields as $this_fieldname=>$this_choice_array) {
+                                $result[$this_record][$this_fieldname] = $this_choice_array;
+                        }
+                        // Now loop through $chkbox_values to overlay any checked values (i.e. 1's)
+                        if(isset($chkbox_values[$this_record]))
+                        {
+                                foreach ($chkbox_values[$this_record] as $this_fieldname=>$this_choice_array) {
+                                        foreach ($this_choice_array as $this_value=>$this_data_value) {
+                                                // Make sure it's a real checkbox option and not some random data point that leaked in
+                                                if (isset($chkbox_fields[$this_fieldname][$this_value])) {
+                                                        // Add checkbox data to data array
+                                                        $result[$this_record][$this_fieldname][$this_value] = $this_data_value;
+                                                }
+                                        }
+                                }
+                        }
+                }
+                return $result;
+        }
